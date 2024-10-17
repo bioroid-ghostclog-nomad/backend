@@ -12,7 +12,7 @@ from rest_framework.exceptions import NotFound,ParseError,PermissionDenied
 from rest_framework.permissions import IsAuthenticated,IsAuthenticatedOrReadOnly
 # Create your views here.
 
-class Regist(APIView):
+class UserData(APIView):
     def post(self,request):
         serializer = UserRegistSerializer(data=request.data)
         if serializer.is_valid():
@@ -21,7 +21,19 @@ class Regist(APIView):
             return Response(serializer.data,status=HTTP_201_CREATED)
         else:
             return Response(serializer.errors,status=HTTP_400_BAD_REQUEST)
-        
+
+# 아이디 중복 체크
+class IdChk(APIView): 
+    def post(self, request):
+        username = request.data.get("username")
+        if User.objects.filter(username=username).exists():
+            return Response({"response": "중복 아이디입니다."})
+        return Response({"response": "사용 가능한 아이디입니다."})
+    
+
+
+
+### jwt 방식으로 인해 하단의 비지니스 코드들은 사용하지 않습니다. ###
 class Login(APIView):
     def post(self,request):
         username = request.data.get("username")
@@ -46,3 +58,4 @@ class Logout(APIView):
     def post(self, request):
         logout(request)
         return Response({"response": "로그아웃 되었습니다!"})
+
