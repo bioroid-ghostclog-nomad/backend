@@ -15,7 +15,7 @@ from rest_framework.permissions import IsAuthenticated,IsAuthenticatedOrReadOnly
 class UserData(APIView):
     def post(self,request):
         serializer = UserRegistSerializer(data=request.data)
-        if serializer.is_valid():
+        if serializer.is_valid(): # 데이터 유효성 검사
             user = serializer.save()
             serializer = UserRegistSerializer(user)
             return Response(serializer.data,status=HTTP_201_CREATED)
