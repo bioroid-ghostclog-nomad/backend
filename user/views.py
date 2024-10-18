@@ -136,9 +136,9 @@ class Email(APIView):
         try:
             email_obj = EmailValidate.objects.get(email=email, code=code)
             email_obj.delete()
-            return Response({"response": "인증이 완료되었습니다."})
+            return Response({"response": "success"})
         except:
-            raise NotFound
+            return Response({"response": "fail"})
 
 
 ### jwt 방식으로 인해 하단의 비지니스 코드들은 사용하지 않습니다. ###
