@@ -52,8 +52,30 @@ class Me(APIView):
 
 class UserPassword(APIView):
 
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
-        pass
+        user = request.user
+        password = request.data.get("password")
+        if not password:
+            raise ParseError
+        if user.check_password(password):
+            return Response(status=HTTP_200_OK)
+        else:
+            raise PermissionDenied
+
+    def put(self, request):
+        user = request.user
+        old_password = request.data.get("old_password")
+        new_password = request.data.get("new_password")
+        if not old_password or not new_password:
+            raise ParseError
+        if user.check_password(old_password):
+            user.set_password(new_password)
+            user.save()
+            return Response(status=HTTP_200_OK)
+        else:
+            raise PermissionDenied
 
 
 class UserData(APIView):
