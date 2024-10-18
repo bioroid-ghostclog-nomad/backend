@@ -17,7 +17,7 @@ class UserRegistSerializer(serializers.ModelSerializer):
         user.save()
         return user
 
-
+# 단순 유저 시리얼라이저
 class TinyUserSerializer(serializers.ModelSerializer):
 
     class Meta:

@@ -17,3 +17,8 @@ class User(AbstractUser):
         if self.api_key:
             return "yes"
         return "no"
+    
+# 이메일 비밀번호 인증용 모델
+class EmailValidate(models.Model):
+    email = models.EmailField(max_length=254,unique=True)
+    code = models.CharField(max_length=8)

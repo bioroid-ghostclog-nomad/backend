@@ -151,3 +151,13 @@ SIMPLE_JWT = {
     'SIGNING_KEY': SECRET_KEY,  # Django의 SECRET_KEY 사용
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
+
+# 이메일 관련 설정들
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.naver.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = ''
+EMAIL_HOST_PASSWORD = ''
+#EMAIL_HOST_PASSWORD = 'ccb58da6-363d-4322-879b-0e70cf764979' # 하루 100건만 가능한 무료 플랜 API 키
+DEFAULT_FROM_EMAIL = ''
