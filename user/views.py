@@ -1,5 +1,5 @@
 # 파이썬 모듈
-import secrets # 인증 코드 생성용
+import secrets  # 인증 코드 생성용
 
 # Django 기본 제공
 from django.shortcuts import render
@@ -9,7 +9,7 @@ from django.template.loader import render_to_string
 from django.conf import settings
 
 # 프로젝트 내에서 정의한 내영
-from .models import User,EmailValidate
+from .models import User, EmailValidate
 from .serializer import TinyUserSerializer, UserRegistSerializer
 
 # DRF
@@ -22,16 +22,38 @@ from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnl
 # Create your views here.
 
 
-class UserDetail(APIView):
+class Me(APIView):
 
-    def get(self, request, id):
-        try:
-            user = User.objects.get(id=id)
-        except User.DoesNotExist:
-            raise NotFound("유저를 찾을 수 없습니다.")
+    permission_classes = [IsAuthenticated]
 
+    def get(self, request):
+        user = request.user
         serializer = TinyUserSerializer(user)
         return Response(serializer.data)
+
+    def put(self, request):
+        user = request.user
+        serializer = TinyUserSerializer(
+            user,
+            data=request.data,
+            partial=True,
+        )
+        if serializer.is_valid():
+            updated_user = serializer.save()
+            return Response(
+                TinyUserSerializer(updated_user).data,
+            )
+        else:
+            return Response(
+                serializer.errors,
+                status=HTTP_400_BAD_REQUEST,
+            )
+
+
+class UserPassword(APIView):
+
+    def post(self, request):
+        pass
 
 
 class UserData(APIView):
@@ -53,47 +75,48 @@ class IdChk(APIView):
             return Response({"response": "중복 아이디입니다."})
         return Response({"response": "사용 가능한 아이디입니다."})
 
+
 # 이메일 검증
 class Email(APIView):
-    def get_object(self,email):
+    def get_object(self, email):
         try:
             return EmailValidate.objects.get(email=email)
         except:
             return None
-    def post(self, request): # 인증 메일 발송
+
+    def post(self, request):  # 인증 메일 발송
         email = request.data.get("email")
-        code = str(secrets.randbelow(1000000)).zfill(6) # 6자리 인증 코드 생성
+        code = str(secrets.randbelow(1000000)).zfill(6)  # 6자리 인증 코드 생성
         email_obj = self.get_object(email=email)
-        if email_obj: # 이미 인증 메일을 보낸 이메일의 경우(객체 덮어쓰기)
+        if email_obj:  # 이미 인증 메일을 보낸 이메일의 경우(객체 덮어쓰기)
             email_obj.code = code
             email_obj.save()
-        else: # 처음으로 인증 메일을 보내는 경우(데이터 생성)
+        else:  # 처음으로 인증 메일을 보내는 경우(데이터 생성)
             email_obj = EmailValidate.objects.create(email=email, code=code)
-        context = { # 사용자에게 보낼 이메일 내용 설정
-            'username': email,  # 사용자 이름을 이메일로 대체 (실제 사용자 이름이 있다면 변경)
-            'verification_code': code
+        context = {  # 사용자에게 보낼 이메일 내용 설정
+            "username": email,  # 사용자 이름을 이메일로 대체 (실제 사용자 이름이 있다면 변경)
+            "verification_code": code,
         }
-        html_content = render_to_string('sendmail.html', context) # HTML 템플릿 렌더링
+        html_content = render_to_string("sendmail.html", context)  # HTML 템플릿 렌더링
         email_message = EmailMessage(
-            subject='Your Email Verification Code',  # 이메일 제목
-            body=html_content,                       # HTML 내용
+            subject="Your Email Verification Code",  # 이메일 제목
+            body=html_content,  # HTML 내용
             from_email=settings.DEFAULT_FROM_EMAIL,  # 발신자 이메일
-            to=[email],                              # 수신자 이메일
+            to=[email],  # 수신자 이메일
         )
-        email_message.content_subtype = 'html'  # 이메일 형식을 HTML로 설정
+        email_message.content_subtype = "html"  # 이메일 형식을 HTML로 설정
         email_message.send()  # 이메일 발송
         return Response({"response": "이메일이 발송되었습니다."}, status=200)
-    
-    def delete(self, request): # 이메일 검증 및 검증 성공한 모델 제거
+
+    def delete(self, request):  # 이메일 검증 및 검증 성공한 모델 제거
         email = request.data.get("email")
         code = request.data.get("code")
         try:
-            email_obj = EmailValidate.objects.get(email=email,code=code)
+            email_obj = EmailValidate.objects.get(email=email, code=code)
             email_obj.delete()
             return Response({"response": "인증이 완료되었습니다."})
         except:
-            raise NotFound 
-
+            raise NotFound
 
 
 ### jwt 방식으로 인해 하단의 비지니스 코드들은 사용하지 않습니다. ###
