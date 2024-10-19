@@ -8,7 +8,7 @@ class User(AbstractUser):
     last_name = models.CharField(max_length=150, editable=False)
     
     # 추가 컬럼
-    api_key = models.CharField(max_length=150,blank=True,default=None,null=True)
+    api_key = models.CharField(max_length=500,blank=True,default=None,null=True)
 
     def __str__(self):
         return self.username
