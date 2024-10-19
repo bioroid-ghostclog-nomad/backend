@@ -1,5 +1,5 @@
 # 파이썬 모듈
-import secrets  # 인증 코드 생성용
+import secrets,hashlib  # 인증 코드 생성용
 
 # Django 기본 제공
 from django.shortcuts import render
@@ -15,9 +15,12 @@ from .serializer import TinyUserSerializer, UserRegistSerializer
 # DRF
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.status import HTTP_200_OK, HTTP_400_BAD_REQUEST, HTTP_201_CREATED
+from rest_framework.status import HTTP_200_OK, HTTP_400_BAD_REQUEST, HTTP_201_CREATED, HTTP_404_NOT_FOUND
 from rest_framework.exceptions import NotFound, ParseError, PermissionDenied
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
+
+# 랭체인
+from langchain_community.chat_models import ChatOpenAI
 
 # Create your views here.
 
@@ -139,6 +142,34 @@ class Email(APIView):
             return Response({"response": "success"})
         except:
             return Response({"response": "fail"})
+
+class APIKey(APIView):
+    permission_classes = [IsAuthenticated]
+
+        
+    def get(self, request):
+        user = request.user
+        if user.api_key:
+            return Response({"response": "이메일이 발송되었습니다."}, status=HTTP_200_OK)
+        return Response({"response": "이메일이 발송되었습니다."}, status=HTTP_404_NOT_FOUND)
+
+    def post(self, request):
+        user = request.user
+        api_key = request.data.get("api_key")
+        llm = ChatOpenAI(
+            temperature=0,
+            openai_api_key=api_key,
+        )
+        try:
+            llm.predict("안녕")
+            user.api_key = hashlib.sha256(api_key.encode()).hexdigest()
+            user.save()
+            return Response({"response": "등록 성공!"}, status=HTTP_201_CREATED)
+        except:
+            return Response({"response": "유효하지 않은 API키입니다!"}, status=HTTP_400_BAD_REQUEST)
+
+
+        
 
 
 ### jwt 방식으로 인해 하단의 비지니스 코드들은 사용하지 않습니다. ###
