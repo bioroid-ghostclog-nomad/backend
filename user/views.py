@@ -1,5 +1,5 @@
 # 파이썬 모듈
-import secrets,hashlib  # 인증 코드 생성용
+import secrets  # 인증 코드 생성용
 
 # Django 기본 제공
 from django.shortcuts import render
@@ -7,6 +7,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.core.mail import EmailMessage
 from django.template.loader import render_to_string
 from django.conf import settings
+from django.core import signing
 
 # 프로젝트 내에서 정의한 내영
 from .models import User, EmailValidate
@@ -20,7 +21,7 @@ from rest_framework.exceptions import NotFound, ParseError, PermissionDenied
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
 
 # 랭체인
-from langchain_community.chat_models import ChatOpenAI
+from langchain_openai import ChatOpenAI
 
 # Create your views here.
 
@@ -150,8 +151,8 @@ class APIKey(APIView):
     def get(self, request):
         user = request.user
         if user.api_key:
-            return Response({"response": "이메일이 발송되었습니다."}, status=HTTP_200_OK)
-        return Response({"response": "이메일이 발송되었습니다."}, status=HTTP_404_NOT_FOUND)
+            return Response({"response": "success"}, status=HTTP_200_OK)
+        return Response({"response": "fail"}, status=HTTP_404_NOT_FOUND)
 
     def post(self, request):
         user = request.user
@@ -161,8 +162,8 @@ class APIKey(APIView):
             openai_api_key=api_key,
         )
         try:
-            llm.predict("안녕")
-            user.api_key = hashlib.sha256(api_key.encode()).hexdigest()
+            llm.predict("안녕") # 유효하지 않은 api키면 에러 발생.
+            user.api_key = signing.dumps(api_key)
             user.save()
             return Response({"response": "등록 성공!"}, status=HTTP_201_CREATED)
         except:
