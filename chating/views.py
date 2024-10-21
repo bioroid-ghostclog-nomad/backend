@@ -1,11 +1,10 @@
 # 파이썬 모듈
-from io import BytesIO
 import json
 
-# Django 기본 제공
+# Django 기본 제공 기능
 from django.core import signing
 
-# 프로젝트 내에서 정의한 내영
+# 프로젝트 내에서 정의한 내용
 from .models import Chating, ChatingRoom
 from .serializer import ChatingRoomSerializer
 
@@ -29,11 +28,11 @@ from langchain_unstructured import UnstructuredLoader
 
 # 기타 모듈
 
-
+# 채팅방 목록
 class ChatingRooms(APIView):
     permission_classes = [IsAuthenticated]
 
-
+# 특정 채팅방(확인 / 생성)
 class ChatingRoomData(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -43,43 +42,48 @@ class ChatingRoomData(APIView):
         except:
             raise NotFound
 
-    def get(self, request):
+    def get(self, request): # pk에 따른 채팅방 입장하기
         pk = request.data.get("pk")
         serializer = self.get_object(pk=pk)
         return Response(serializer.data, status=HTTP_200_OK)
 
-    def post(self, request):
+    def post(self, request): # PDF 전달받고, 임베딩.
         try:
+            # 기본 정보 받아오기 및 기본 객체 생성
             title = request.data.get("title")
             model = request.data.get("model")
             pdf = request.FILES.get("pdf")
             chating_room = ChatingRoom.objects.create(
-                user=request.user,  # 또는 필요한 사용자 지정
+                user=request.user,
                 pdf=pdf,
                 ai_model=model,
             )
             chating_room.save()
-            pk = chating_room.pk
             pdf_path = chating_room.pdf.path
-
+            # 분할기 객체
             splitter = CharacterTextSplitter.from_tiktoken_encoder(
                 separator="\n",
                 chunk_size=600,
                 chunk_overlap=100,
             )
+            # PDF 업로드
             loader = UnstructuredLoader(pdf_path)
+            # 업로드 PDF spliter로 분활
             docs = loader.load_and_split(text_splitter=splitter)
+            # 사용자 api key로 임베딩 객체 생성
             embeddings = OpenAIEmbeddings(openai_api_key = signing.loads(request.user.api_key))
+            # 임베딩 객체로 데이터 토크나이저
             embedded_docs = embeddings.embed_documents([doc.page_content for doc in docs])
-            # 임베딩을 JSON으로 저장
+            # 임베딩 데이터를 Json으로 변환
             chating_room.pdf_embedding = json.dumps(embedded_docs)
-            # 인스턴스 저장
+            # 인스턴스 완전 저장
             chating_room.save()
+            pk = chating_room.pk
             return Response({"response": "success", "pk": pk})
         except:
             return Response({"response": "fail", "pk": pk})
 
-
+# 메세지
 class Messages(APIView):
 
     def get_chatting_room(self, id):
@@ -91,8 +95,8 @@ class Messages(APIView):
     def get(self, request, id):
         # 채팅방 하나의 모든 채팅 메세지 반환
         chatting_room = self.get_chatting_room(id)
+        # 채팅방 소유 여부 확인
         user = request.user
-
         if user != chatting_room.user:
             raise PermissionDenied("이 채팅방에 접근할 권한이 없습니다.")
 

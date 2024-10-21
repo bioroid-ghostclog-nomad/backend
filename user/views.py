@@ -1,14 +1,14 @@
 # 파이썬 모듈
 import secrets  # 인증 코드 생성용
 
-# Django 기본 제공
+# Django 기본 제공 기능들
 from django.contrib.auth import authenticate, login, logout
-from django.core.mail import EmailMessage
-from django.template.loader import render_to_string
-from django.conf import settings
-from django.core import signing
+from django.core.mail import EmailMessage # 이메일 전송
+from django.template.loader import render_to_string # 이메일 전송시 메일(html)에 인증 코드 추가하기
+from django.conf import settings # 프로젝트 setting.py 호출
+from django.core import signing # api키 암호화용
 
-# 프로젝트 내에서 정의한 내영
+# 프로젝트 내에서 정의한 내용
 from .models import User, EmailValidate
 from .serializer import TinyUserSerializer, UserRegistSerializer
 
@@ -22,19 +22,17 @@ from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnl
 # 랭체인
 from langchain_openai import ChatOpenAI
 
-# Create your views here.
-
-
+# 마이페이지
 class Me(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def get(self, request):
+    def get(self, request): # 내 정보 보기
         user = request.user
         serializer = TinyUserSerializer(user)
         return Response(serializer.data)
 
-    def put(self, request):
+    def put(self, request): # 내 정보 수정
         user = request.user
         serializer = TinyUserSerializer(
             user,
@@ -52,12 +50,12 @@ class Me(APIView):
                 status=HTTP_400_BAD_REQUEST,
             )
 
-
+# 유저 비밀번호
 class UserPassword(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def post(self, request):
+    def post(self, request): # 비밀번호 인증 / 마이페이지 입장시
         user = request.user
         password = request.data.get("password")
         if not password:
@@ -67,7 +65,7 @@ class UserPassword(APIView):
         else:
             raise PermissionDenied
 
-    def put(self, request):
+    def put(self, request): # 비밀번호 수정
         user = request.user
         old_password = request.data.get("old_password")
         new_password = request.data.get("new_password")
@@ -80,8 +78,8 @@ class UserPassword(APIView):
         else:
             raise PermissionDenied
 
-
-class UserData(APIView):
+# 유저 회원가입
+class UserData(APIView): 
     def post(self, request):
         serializer = UserRegistSerializer(data=request.data)
         if serializer.is_valid():  # 데이터 유효성 검사
@@ -103,7 +101,7 @@ class IdChk(APIView):
 
 # 이메일 검증
 class Email(APIView):
-    def get_object(self, email):
+    def get_object(self, email): # 인증 코드 model 객체 불러오기.
         try:
             return EmailValidate.objects.get(email=email)
         except:
@@ -113,10 +111,10 @@ class Email(APIView):
         email = request.data.get("email")
         code = str(secrets.randbelow(1000000)).zfill(6)  # 6자리 인증 코드 생성
         email_obj = self.get_object(email=email)
-        if email_obj:  # 이미 인증 메일을 보낸 이메일의 경우(객체 덮어쓰기)
+        if email_obj:  # 이미 인증 메일을 보낸 이메일의 경우(객체 덮어쓰기 / 반환값 존재)
             email_obj.code = code
             email_obj.save()
-        else:  # 처음으로 인증 메일을 보내는 경우(데이터 생성)
+        else:  # 처음으로 인증 메일을 보내는 경우(데이터 생성 / None 반환시)
             email_obj = EmailValidate.objects.create(email=email, code=code)
         context = {  # 사용자에게 보낼 이메일 내용 설정
             "username": email,  # 사용자 이름을 이메일로 대체 (실제 사용자 이름이 있다면 변경)
@@ -143,17 +141,16 @@ class Email(APIView):
         except:
             return Response({"response": "fail"})
 
+# api 키 관련
 class APIKey(APIView):
     permission_classes = [IsAuthenticated]
-
-        
-    def get(self, request):
+    def get(self, request): # api 키 등록 여부
         user = request.user
         if user.api_key:
             return Response({"response": "success"}, status=HTTP_200_OK)
         return Response({"response": "fail"}, status=HTTP_404_NOT_FOUND)
 
-    def post(self, request):
+    def post(self, request): # api 신규 등록 혹은 교체
         user = request.user
         api_key = request.data.get("api_key")
         llm = ChatOpenAI(
@@ -162,7 +159,7 @@ class APIKey(APIView):
         )
         try:
             llm.predict("안녕") # 유효하지 않은 api키면 에러 발생.
-            user.api_key = signing.dumps(api_key)
+            user.api_key = signing.dumps(api_key) #  api키 signing를 통해 암호화. 복호화는 loads 사용
             user.save()
             return Response({"response": "등록 성공!"}, status=HTTP_201_CREATED)
         except:
