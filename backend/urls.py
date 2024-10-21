@@ -24,8 +24,11 @@ from django.conf import settings
 from django.conf.urls.static import static
 
 urlpatterns = [
+    # 어드민
     path('admin/', admin.site.urls),
+    # 앱 연결
     path('api/v1/users/', include('user.urls')),
+    path('api/v1/chating/', include('chating.urls')),
     # 하단은 jwt를 이용한 로그인
     path('api/v1/users/login', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/v1/users/login/refresh/', TokenRefreshView.as_view(), name='token_refresh'),

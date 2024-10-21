@@ -2,7 +2,6 @@
 import secrets  # 인증 코드 생성용
 
 # Django 기본 제공
-from django.shortcuts import render
 from django.contrib.auth import authenticate, login, logout
 from django.core.mail import EmailMessage
 from django.template.loader import render_to_string
