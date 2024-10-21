@@ -3,6 +3,7 @@ from io import BytesIO
 import json
 
 # Django 기본 제공
+from django.core import signing
 
 # 프로젝트 내에서 정의한 내영
 from .models import Chating, ChatingRoom
@@ -48,32 +49,35 @@ class ChatingRoomData(APIView):
         return Response(serializer.data, status=HTTP_200_OK)
 
     def post(self, request):
-        title = request.data.get("title")
-        model = request.data.get("model")
-        pdf = request.FILES.get("pdf")
-        chating_room = ChatingRoom.objects.create(
-            user=request.user,  # 또는 필요한 사용자 지정
-            pdf=pdf,
-            ai_model=model,
-        )
-        chating_room.save()
-        pk = chating_room.pk
-        pdf_path = chating_room.pdf.path
+        try:
+            title = request.data.get("title")
+            model = request.data.get("model")
+            pdf = request.FILES.get("pdf")
+            chating_room = ChatingRoom.objects.create(
+                user=request.user,  # 또는 필요한 사용자 지정
+                pdf=pdf,
+                ai_model=model,
+            )
+            chating_room.save()
+            pk = chating_room.pk
+            pdf_path = chating_room.pdf.path
 
-        splitter = CharacterTextSplitter.from_tiktoken_encoder(
-            separator="\n",
-            chunk_size=600,
-            chunk_overlap=100,
-        )
-        loader = UnstructuredLoader(pdf_path)
-        docs = loader.load_and_split(text_splitter=splitter)
-        embeddings = OpenAIEmbeddings()
-        embedded_docs = embeddings.embed_documents([doc.page_content for doc in docs])
-        # 임베딩을 JSON으로 저장
-        chating_room.pdf_embedding = json.dumps(embedded_docs)
-        # 인스턴스 저장
-        chating_room.save()
-        return Response({"response": "success", "pk": pk})
+            splitter = CharacterTextSplitter.from_tiktoken_encoder(
+                separator="\n",
+                chunk_size=600,
+                chunk_overlap=100,
+            )
+            loader = UnstructuredLoader(pdf_path)
+            docs = loader.load_and_split(text_splitter=splitter)
+            embeddings = OpenAIEmbeddings(openai_api_key = signing.loads(request.user.api_key))
+            embedded_docs = embeddings.embed_documents([doc.page_content for doc in docs])
+            # 임베딩을 JSON으로 저장
+            chating_room.pdf_embedding = json.dumps(embedded_docs)
+            # 인스턴스 저장
+            chating_room.save()
+            return Response({"response": "success", "pk": pk})
+        except:
+            return Response({"response": "fail", "pk": pk})
 
 
 class Messages(APIView):
