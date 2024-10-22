@@ -6,7 +6,7 @@ from django.core import signing
 
 # 프로젝트 내에서 정의한 내용
 from .models import Chating, ChatingRoom
-from .serializer import ChatingRoomSerializer, ChatingSerializer
+from .serializer import ChatingRoomSerializer, ChatingSerializer, ChatingRoomListSerializer
 
 # DRF
 from rest_framework.views import APIView
@@ -34,6 +34,11 @@ from langchain.schema.runnable import RunnablePassthrough, RunnableLambda
 
 class ChatingRooms(APIView):
     permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        chat_rooms = ChatingRoom.objects.filter(user=request.user)
+        serializer = ChatingRoomListSerializer(chat_rooms,many=True)
+        return Response(serializer.data,status=HTTP_200_OK)
 
 
 class ChatingRoomData(APIView):
