@@ -89,7 +89,6 @@ class ChatingRoomData(APIView):
             pk = chating_room.pk
             return Response({"response": "success", "pk": pk})
         except Exception as e:
-            # print(e.with_traceback())
             return Response({"response": "fail"})
 
 
