@@ -3,10 +3,15 @@ import json
 
 # Django 기본 제공 기능
 from django.core import signing
+from django.db import transaction
 
 # 프로젝트 내에서 정의한 내용
 from .models import Chating, ChatingRoom
-from .serializer import ChatingRoomSerializer, ChatingSerializer, ChatingRoomListSerializer
+from .serializer import (
+    ChatingRoomSerializer,
+    ChatingSerializer,
+    ChatingRoomListSerializer,
+)
 
 # DRF
 from rest_framework.views import APIView
@@ -27,9 +32,11 @@ from langchain.text_splitter import CharacterTextSplitter
 from langchain_community.embeddings import OpenAIEmbeddings
 from langchain_unstructured import UnstructuredLoader
 from langchain_community.vectorstores import FAISS
-from langchain.schema.runnable import RunnablePassthrough, RunnableLambda
+from langchain.schema.runnable import RunnablePassthrough
 
 # 기타 모듈
+import numpy as np
+import faiss
 
 
 class ChatingRooms(APIView):
@@ -37,8 +44,8 @@ class ChatingRooms(APIView):
 
     def get(self, request):
         chat_rooms = ChatingRoom.objects.filter(user=request.user)
-        serializer = ChatingRoomListSerializer(chat_rooms,many=True)
-        return Response(serializer.data,status=HTTP_200_OK)
+        serializer = ChatingRoomListSerializer(chat_rooms, many=True)
+        return Response(serializer.data, status=HTTP_200_OK)
 
 
 class ChatingRoomData(APIView):
@@ -98,7 +105,7 @@ class ChatingRoomData(APIView):
 
 
 # 메세지
-class Messages(APIView):
+class ChatingMessages(APIView):
 
     permission_classes = [IsAuthenticated]
 
@@ -126,7 +133,7 @@ class Messages(APIView):
 
         chats = chatting_room.chating
 
-        serializer = ChatingRoomSerializer(chats, many=True)
+        serializer = ChatingSerializer(chats, many=True)
 
         return Response(serializer.data)
 
@@ -138,68 +145,89 @@ class Messages(APIView):
         if user != chatting_room.user:
             raise PermissionDenied("이 채팅방에 접근할 권한이 없습니다.")
 
-        human_message = request.data("chat")
+        human_message = request.data.get("chat")
 
         human_message_serializer = ChatingSerializer(data=request.data)
         if human_message_serializer.is_valid():
-            human_message_serializer.save(chatingRoom=chatting_room)
-            # AI 답변 진행
-            pdf_path = chatting_room.pdf.path
-            # 분할기 객체
-            splitter = CharacterTextSplitter.from_tiktoken_encoder(
-                separator="\n",
-                chunk_size=600,
-                chunk_overlap=100,
-            )
-            # PDF 업로드
-            loader = UnstructuredLoader(pdf_path)
-            # 업로드 PDF spliter로 분활
-            docs = loader.load_and_split(text_splitter=splitter)
+            try:
+                with transaction.atomic():
+                    human_message_serializer.save(chatingRoom=chatting_room)
+                    # AI 답변 진행
+                    pdf_path = chatting_room.pdf.path
+                    # 분할기 객체
+                    splitter = CharacterTextSplitter.from_tiktoken_encoder(
+                        separator="\n",
+                        chunk_size=600,
+                        chunk_overlap=100,
+                    )
+                    # PDF 업로드
+                    loader = UnstructuredLoader(pdf_path)
+                    # 업로드 PDF spliter로 분할
+                    docs = loader.load_and_split(text_splitter=splitter)
 
-            pdf_embedding = chatting_room.pdf_embedding
-            vectorstore = FAISS.from_documents(docs, pdf_embedding)
-            retriever = vectorstore.as_retriever()
+                    # 문자열로 저장된 임베딩을 다시 가져옴
+                    # pdf_embedding = np.array(
+                    #     json.loads(chatting_room.pdf_embedding)
+                    # ).astype("float32")
+                    # index = faiss.IndexFlatL2(pdf_embedding.shape[1])
+                    # index.add(pdf_embedding)
+                    vectorstore = FAISS.from_documents(
+                        docs,
+                        OpenAIEmbeddings(
+                            openai_api_key=signing.loads(request.user.api_key)
+                        ),
+                    )
+                    retriever = vectorstore.as_retriever()
+                    llm = ChatOpenAI(
+                        api_key=user.api_key,
+                        model=chatting_room.ai_model,
+                        temperature=0.1,
+                    )
 
-            llm = ChatOpenAI(
-                api_key=user.api_key,
-                model=chatting_room.ai_model,
-                temperature=0.1,
-            )
+                    prompt = ChatPromptTemplate.from_messages(
+                        [
+                            (
+                                "system",
+                                """
+                    Answer the question using ONLY the following context. If you don't know the answer just say you don't know. DON'T make anything up.
+                    
+                    Context: {context}
+                    """,
+                            ),
+                            MessagesPlaceholder(variable_name="history"),
+                            ("human", "{question}"),
+                        ]
+                    )
 
-            prompt = ChatPromptTemplate.from_messages(
-                [
-                    (
-                        "system",
-                        """
-            Answer the question using ONLY the following context. If you don't know the answer just say you don't know. DON'T make anything up.
-            
-            Context: {context}
-            """,
-                    ),
-                    MessagesPlaceholder(variable_name="history"),
-                    ("human", "{question}"),
-                ]
-            )
+                    chats = chatting_room.chating
 
-            chain = (
-                {
-                    "history": RunnableLambda(self.get_history),
-                    "context": retriever | RunnableLambda(self.format_docs),
-                    "question": RunnablePassthrough(),
-                }
-                | prompt
-                | llm
-            )
+                    chain = (
+                        {
+                            "history": lambda _: chats,
+                            "context": retriever
+                            | (
+                                lambda _: "\n\n".join(
+                                    document.page_content for document in docs
+                                )
+                            ),
+                            "question": RunnablePassthrough(),
+                        }
+                        | prompt
+                        | llm
+                    )
 
-            result = chain.invoke(human_message)
-            ai_message = result.content
+                    result = chain.invoke(human_message)
+                    ai_message = result.content
 
-            Chating.objects.create(
-                chat=ai_message,
-                speaker="ai",
-                chatingRoom=chatting_room,
-            )
+                    Chating.objects.create(
+                        chat=ai_message,
+                        speaker="ai",
+                        chatingRoom=chatting_room,
+                    )
 
-            return Response({"ai_message": ai_message})
+                    return Response({"ai_message": ai_message})
+            except Exception as e:
+                print(e.with_traceback())
+                raise ParseError("채팅을 저장하는데 실패했습니다.")
         else:
             return Response(human_message_serializer.error, status=HTTP_400_BAD_REQUEST)

@@ -14,7 +14,8 @@ class ChatingRoomSerializer(serializers.ModelSerializer):
         chat_room = ChatingRoom(**validated_data)
         chat_room.save()  # 저장 후 pdf_embedding 생성
         return chat_room
-    
+
+
 class ChatingRoomListSerializer(serializers.ModelSerializer):
 
     class Meta:
@@ -35,4 +36,7 @@ class ChatingSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Chating
-        fields = "__all__"
+        fields = (
+            "speaker",
+            "chat",
+        )
