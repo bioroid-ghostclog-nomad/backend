@@ -1,5 +1,8 @@
 # 파이썬 모듈
 import json
+# 에러 해결용 임시방편
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 
 # Django 기본 제공 기능
 from django.core import signing
@@ -7,6 +10,7 @@ from django.db import transaction
 
 # 프로젝트 내에서 정의한 내용
 from .models import Chating, ChatingRoom
+from user.models import User
 from .serializer import (
     ChatingRoomSerializer,
     ChatingSerializer,
@@ -20,6 +24,7 @@ from rest_framework.status import (
     HTTP_200_OK,
     HTTP_400_BAD_REQUEST,
     HTTP_201_CREATED,
+    HTTP_204_NO_CONTENT,
     HTTP_404_NOT_FOUND,
 )
 from rest_framework.exceptions import NotFound, ParseError, PermissionDenied
@@ -36,7 +41,8 @@ from langchain.schema.runnable import RunnablePassthrough
 
 # 기타 모듈
 import numpy as np
-import faiss
+
+# import faiss
 
 
 class ChatingRooms(APIView):
@@ -46,6 +52,11 @@ class ChatingRooms(APIView):
         chat_rooms = ChatingRoom.objects.filter(user=request.user)
         serializer = ChatingRoomListSerializer(chat_rooms, many=True)
         return Response(serializer.data, status=HTTP_200_OK)
+    
+    def delete(self, request):
+        rooms = request.user.ChatingRoom
+        rooms.delete()
+        return Response({"response": "success"},status=HTTP_204_NO_CONTENT)
 
 
 class ChatingRoomData(APIView):
