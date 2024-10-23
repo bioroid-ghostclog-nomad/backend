@@ -1,8 +1,10 @@
 # 파이썬 모듈
 import json
+
 # 에러 해결용 임시방편
 import os
-os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
+
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 # Django 기본 제공 기능
 from django.core import signing
@@ -38,6 +40,7 @@ from langchain_community.embeddings import OpenAIEmbeddings
 from langchain_unstructured import UnstructuredLoader
 from langchain_community.vectorstores import FAISS
 from langchain.schema.runnable import RunnablePassthrough
+from langchain.schema import HumanMessage, AIMessage
 
 # 기타 모듈
 import numpy as np
@@ -52,11 +55,11 @@ class ChatingRooms(APIView):
         chat_rooms = ChatingRoom.objects.filter(user=request.user)
         serializer = ChatingRoomListSerializer(chat_rooms, many=True)
         return Response(serializer.data, status=HTTP_200_OK)
-    
+
     def delete(self, request):
         rooms = request.user.ChatingRoom
         rooms.delete()
-        return Response({"response": "success"},status=HTTP_204_NO_CONTENT)
+        return Response({"response": "success"}, status=HTTP_204_NO_CONTENT)
 
 
 class ChatingRoomData(APIView):
@@ -176,12 +179,6 @@ class ChatingMessages(APIView):
                     # 업로드 PDF spliter로 분할
                     docs = loader.load_and_split(text_splitter=splitter)
 
-                    # 문자열로 저장된 임베딩을 다시 가져옴
-                    # pdf_embedding = np.array(
-                    #     json.loads(chatting_room.pdf_embedding)
-                    # ).astype("float32")
-                    # index = faiss.IndexFlatL2(pdf_embedding.shape[1])
-                    # index.add(pdf_embedding)
                     vectorstore = FAISS.from_documents(
                         docs,
                         OpenAIEmbeddings(
@@ -190,7 +187,7 @@ class ChatingMessages(APIView):
                     )
                     retriever = vectorstore.as_retriever()
                     llm = ChatOpenAI(
-                        api_key=user.api_key,
+                        api_key=signing.loads(request.user.api_key),
                         model=chatting_room.ai_model,
                         temperature=0.1,
                     )
@@ -210,11 +207,20 @@ class ChatingMessages(APIView):
                         ]
                     )
 
-                    chats = chatting_room.chating
+                    chats = chatting_room.chating.all()
 
                     chain = (
                         {
-                            "history": lambda _: chats,
+                            "history": lambda _: (
+                                [
+                                    (
+                                        AIMessage(content=chat.chat)
+                                        if chat.speaker == "ai"
+                                        else HumanMessage(content=chat.chat)
+                                    )
+                                    for chat in chats
+                                ]
+                            ),
                             "context": retriever
                             | (
                                 lambda _: "\n\n".join(
