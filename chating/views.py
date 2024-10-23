@@ -41,6 +41,7 @@ from langchain_unstructured import UnstructuredLoader
 from langchain_community.vectorstores import FAISS
 from langchain.schema.runnable import RunnablePassthrough
 from langchain.schema import HumanMessage, AIMessage
+from langchain.callbacks import get_openai_callback
 
 # 기타 모듈
 import numpy as np
@@ -179,9 +180,12 @@ class ChatingMessages(APIView):
                     # 업로드 PDF spliter로 분할
                     docs = loader.load_and_split(text_splitter=splitter)
 
-                    vectorstore = FAISS.from_documents(
-                        docs,
-                        OpenAIEmbeddings(
+                    # 문자열로 저장된 임베딩을 다시 가져옴
+                    pdf_embedding = json.loads(chatting_room.pdf_embedding)
+
+                    vectorstore = FAISS.from_embeddings(
+                        text_embeddings=pdf_embedding,
+                        embedding=OpenAIEmbeddings(
                             openai_api_key=signing.loads(request.user.api_key)
                         ),
                     )
@@ -248,3 +252,16 @@ class ChatingMessages(APIView):
                 raise ParseError("채팅을 저장하는데 실패했습니다.")
         else:
             return Response(human_message_serializer.error, status=HTTP_400_BAD_REQUEST)
+
+
+class Stats(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        # Stats에 쓸 통계 데이터 처리
+        # 계정 사용 통계(메시지 수, 대화 수, 파일 수)
+        # 비용 분석(대화당 사용된 토큰 수, 대화의 총 비용)
+        user = request.user
+
+        return Response()
