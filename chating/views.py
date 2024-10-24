@@ -36,12 +36,14 @@ from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnl
 from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.text_splitter import CharacterTextSplitter
-from langchain_community.embeddings import OpenAIEmbeddings
+from langchain_openai import OpenAIEmbeddings
+from langchain.embeddings import CacheBackedEmbeddings
 from langchain_unstructured import UnstructuredLoader
 from langchain_community.vectorstores import FAISS
 from langchain.schema.runnable import RunnablePassthrough
 from langchain.schema import HumanMessage, AIMessage
-from langchain.callbacks import get_openai_callback
+from langchain.storage import LocalFileStore
+
 
 # 기타 모듈
 import numpy as np
@@ -90,27 +92,6 @@ class ChatingRoomData(APIView):
                 ai_model=model,
             )
             chating_room.save()
-            pdf_path = chating_room.pdf.path
-            # 분할기 객체
-            splitter = CharacterTextSplitter.from_tiktoken_encoder(
-                separator="\n",
-                chunk_size=600,
-                chunk_overlap=100,
-            )
-            # PDF 업로드
-            loader = UnstructuredLoader(pdf_path)
-            # 업로드 PDF spliter로 분활
-            docs = loader.load_and_split(text_splitter=splitter)
-            # 사용자 api key로 임베딩 객체 생성
-            embeddings = OpenAIEmbeddings(
-                openai_api_key=signing.loads(request.user.api_key)
-            )
-            # 임베딩 객체로 데이터 토크나이저
-            embedded_docs = embeddings.embed_documents(
-                [doc.page_content for doc in docs]
-            )
-            # 임베딩 데이터를 Json으로 변환
-            chating_room.pdf_embedding = json.dumps(embedded_docs)
             # 인스턴스 완전 저장
             chating_room.save()
             pk = chating_room.pk
@@ -175,21 +156,26 @@ class ChatingMessages(APIView):
                         chunk_size=600,
                         chunk_overlap=100,
                     )
+
+                    if not chatting_room.pdf_embedding:
+                        cache_dir = LocalFileStore(f"./.cache/embeddings/{chatting_room.pdf.name}")
+                        chatting_room.pdf_embedding = cache_dir
+                        chatting_room.save()
+                    else:
+                        cache_dir = chatting_room.pdf_embedding
+                    print(cache_dir.root_path)
+
                     # PDF 업로드
                     loader = UnstructuredLoader(pdf_path)
                     # 업로드 PDF spliter로 분할
                     docs = loader.load_and_split(text_splitter=splitter)
-
-                    # 문자열로 저장된 임베딩을 다시 가져옴
-                    pdf_embedding = json.loads(chatting_room.pdf_embedding)
-
-                    vectorstore = FAISS.from_embeddings(
-                        text_embeddings=pdf_embedding,
-                        embedding=OpenAIEmbeddings(
-                            openai_api_key=signing.loads(request.user.api_key)
-                        ),
-                    )
+                    embeddings = OpenAIEmbeddings(
+                        openai_api_key = signing.loads(user.api_key)
+                        )
+                    cached_embeddings = CacheBackedEmbeddings.from_bytes_store(embeddings, cache_dir)
+                    vectorstore = FAISS.from_documents(docs, cached_embeddings)
                     retriever = vectorstore.as_retriever()
+
                     llm = ChatOpenAI(
                         api_key=signing.loads(request.user.api_key),
                         model=chatting_room.ai_model,
@@ -252,16 +238,3 @@ class ChatingMessages(APIView):
                 raise ParseError("채팅을 저장하는데 실패했습니다.")
         else:
             return Response(human_message_serializer.error, status=HTTP_400_BAD_REQUEST)
-
-
-class Stats(APIView):
-
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        # Stats에 쓸 통계 데이터 처리
-        # 계정 사용 통계(메시지 수, 대화 수, 파일 수)
-        # 비용 분석(대화당 사용된 토큰 수, 대화의 총 비용)
-        user = request.user
-
-        return Response()

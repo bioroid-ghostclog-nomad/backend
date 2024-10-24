@@ -17,8 +17,9 @@ class ChatingRoom(models.Model):
         default="gpt-4o-mini", 
         max_length=30
     )
-    pdf_embedding = models.JSONField(
-        null=True, blank=True
+    pdf_embedding = models.CharField(
+        null=True, blank=True,
+        max_length=30,
     )  # JSONField 사용 / 실제 저장은 문자열로 / PDF 임베딩
 
 
