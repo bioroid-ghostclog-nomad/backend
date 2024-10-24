@@ -158,7 +158,9 @@ class ChatingMessages(APIView):
                     )
 
                     if not chatting_room.pdf_embedding:
-                        cache_dir = LocalFileStore(f"./.cache/embeddings/{chatting_room.pdf.name}")
+                        cache_dir = LocalFileStore(
+                            f"./.cache/embeddings/{chatting_room.pdf.name}"
+                        )
                         chatting_room.pdf_embedding = cache_dir
                         chatting_room.save()
                     else:
@@ -170,9 +172,11 @@ class ChatingMessages(APIView):
                     # 업로드 PDF spliter로 분할
                     docs = loader.load_and_split(text_splitter=splitter)
                     embeddings = OpenAIEmbeddings(
-                        openai_api_key = signing.loads(user.api_key)
-                        )
-                    cached_embeddings = CacheBackedEmbeddings.from_bytes_store(embeddings, cache_dir)
+                        openai_api_key=signing.loads(user.api_key)
+                    )
+                    cached_embeddings = CacheBackedEmbeddings.from_bytes_store(
+                        embeddings, cache_dir
+                    )
                     vectorstore = FAISS.from_documents(docs, cached_embeddings)
                     retriever = vectorstore.as_retriever()
 
@@ -238,3 +242,16 @@ class ChatingMessages(APIView):
                 raise ParseError("채팅을 저장하는데 실패했습니다.")
         else:
             return Response(human_message_serializer.error, status=HTTP_400_BAD_REQUEST)
+
+
+class Stats(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        # Stats에 쓸 통계 데이터 처리
+        # 계정 사용 통계(메시지 수, 대화 수, 파일 수)
+        # 비용 분석(대화당 사용된 토큰 수, 대화의 총 비용)
+        user = request.user
+
+        return Response()
