@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import Chating, ChatingRoom
+from django.db.models import Sum
 
 
 # 채팅룸 시리얼라이저
@@ -39,4 +40,39 @@ class ChatingSerializer(serializers.ModelSerializer):
         fields = (
             "speaker",
             "chat",
+        )
+
+
+class StatsSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = ChatingRoom
+        exclude = ("user", "pdf", "pdf_embedding")
+
+    messages_num = serializers.SerializerMethodField()
+    conversation_num = serializers.SerializerMethodField()
+    file_num = serializers.SerializerMethodField()
+
+    costs = serializers.SerializerMethodField()
+    tokens = serializers.SerializerMethodField()
+
+    def get_messages_num(self, chatingroom):
+        return chatingroom.chating.count()
+
+    def get_conversation_num(self, chatingroom):
+        request = self.context.get("request")
+        user = request.user
+        return ChatingRoom.objects.filter(user=user).count()
+
+    def get_file_num(self, chatingroom):
+        request = self.context.get("request")
+        user = request.user
+        return ChatingRoom.objects.filter(user=user).count()
+
+    def get_costs(self, chatingroom):
+        return chatingroom.chating.aggregate(Sum("cost"))
+
+    def get_tokens(self, chatingroom):
+        return chatingroom.chating.aggregate(
+            Sum("total_tokens"), Sum("input_tokens"), Sum("output_tokens")
         )

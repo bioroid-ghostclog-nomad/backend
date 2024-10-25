@@ -17,6 +17,7 @@ from .serializer import (
     ChatingRoomSerializer,
     ChatingSerializer,
     ChatingRoomListSerializer,
+    StatsSerializer,
 )
 
 # DRF
@@ -43,6 +44,10 @@ from langchain_community.vectorstores import FAISS
 from langchain.schema.runnable import RunnablePassthrough
 from langchain.schema import HumanMessage, AIMessage
 from langchain.storage import LocalFileStore
+from langchain_community.callbacks.manager import (
+    get_openai_callback,
+    get_bedrock_anthropic_callback,
+)
 
 
 # 기타 모듈
@@ -60,7 +65,7 @@ class ChatingRooms(APIView):
         return Response(serializer.data, status=HTTP_200_OK)
 
     def delete(self, request):
-        rooms = request.user.ChatingRoom
+        rooms = request.user.ChatingRoom.all()
         rooms.delete()
         return Response({"response": "success"}, status=HTTP_204_NO_CONTENT)
 
@@ -104,13 +109,6 @@ class ChatingRoomData(APIView):
 class ChatingMessages(APIView):
 
     permission_classes = [IsAuthenticated]
-
-    def get_history(self):
-        all_chats = self.get_chatting_room
-        pass
-
-    def format_docs(docs):
-        return "\n\n".join(document.page_content for document in docs)
 
     def get_chatting_room(self, id):
         try:
@@ -161,11 +159,10 @@ class ChatingMessages(APIView):
                         cache_dir = LocalFileStore(
                             f"./.cache/embeddings/{chatting_room.pdf.name}"
                         )
-                        chatting_room.pdf_embedding = cache_dir
+                        chatting_room.pdf_embedding = cache_dir.root_path
                         chatting_room.save()
                     else:
-                        cache_dir = chatting_room.pdf_embedding
-                    print(cache_dir.root_path)
+                        cache_dir = LocalFileStore(chatting_room.pdf_embedding)
 
                     # PDF 업로드
                     loader = UnstructuredLoader(pdf_path)
@@ -227,13 +224,22 @@ class ChatingMessages(APIView):
                         | llm
                     )
 
-                    result = chain.invoke(human_message)
+                    with get_openai_callback() as usage:
+                        result = chain.invoke(human_message)
+                        cost = usage.total_cost
+                        total_tokens = usage.total_tokens
+                        input_tokens = usage.prompt_tokens
+                        output_tokens = usage.completion_tokens
                     ai_message = result.content
 
                     Chating.objects.create(
                         chat=ai_message,
                         speaker="ai",
                         chatingRoom=chatting_room,
+                        cost=cost,
+                        total_tokens=total_tokens,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
                     )
 
                     return Response({"ai_message": ai_message})
@@ -253,5 +259,10 @@ class Stats(APIView):
         # 계정 사용 통계(메시지 수, 대화 수, 파일 수)
         # 비용 분석(대화당 사용된 토큰 수, 대화의 총 비용)
         user = request.user
-
-        return Response()
+        chatingrooms = user.ChatingRoom.filter(user=user)
+        serializer = StatsSerializer(
+            chatingrooms,
+            many=True,
+            context={"request": request},
+        )
+        return Response(serializer.data)
